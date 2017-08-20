@@ -114,7 +114,6 @@
     <ClInclude Include="DependencyInjected.h" />
   </ItemGroup>
   <ItemGroup>
-    <ClCompile Include="DependencyInjected.cpp" />
     <ClCompile Include="Tester.cpp" />
   </ItemGroup>
   <Import Project="$(VCTargetsPath)\Microsoft.Cpp.targets" />

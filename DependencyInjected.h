@@ -192,7 +192,7 @@ public:
 
     // Start the object
     template<typename... Args>
-    bool Initialize(Args&&... args)
+    auto Initialize(Args&&... args)
     {
         // Catch double-initialization in debug mode
         DI_DEBUG_ASSERT(!IsInitialized());
