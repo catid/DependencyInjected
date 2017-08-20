@@ -149,6 +149,7 @@ void Test_Forget_SetDep()
         nullptr, // &widget,
         nullptr
     });
+#if 0
     widget.SetDependencies({
         cog
     });
@@ -160,6 +161,7 @@ void Test_Forget_SetDep()
 
     widget.Shutdown();
     cog.Shutdown();
+#endif
 }
 
 void Test_Forget_InitCog()
