@@ -165,11 +165,10 @@
 //
 // Smart pointer with dependency injection
 
-template<class T>
-class DependencyInjected
+class IDependencyInjected
 {
 public:
-    typedef typename T::Dependencies DepsT;
+    virtual ~IDependencyInjected() {}
 
     DI_FORCE_INLINE operator bool() const
     {
@@ -177,8 +176,18 @@ public:
     }
     DI_FORCE_INLINE bool IsInitialized() const
     {
-        return Instance != nullptr;
+        return Initialized;
     }
+
+protected:
+    bool Initialized = false;
+};
+
+template<class T>
+class DependencyInjected : public IDependencyInjected
+{
+public:
+    typedef typename T::Dependencies DepsT;
 
     // Set dependencies
     DI_FORCE_INLINE void SetDependencies(const DepsT& deps)
@@ -190,16 +199,14 @@ public:
         SetDeps = true;
     }
 
-    // Start the object
+    // Initialize the object
     template<typename... Args>
     auto Initialize(Args&&... args)
     {
         // Catch double-initialization in debug mode
-        DI_DEBUG_ASSERT(!IsInitialized());
-        DI_DEBUG_ASSERT(SetDeps);
+        DI_DEBUG_ASSERT(SetDeps && !IsInitialized());
 
-        if (Instance)
-            return false;
+        Initialized = true;
 
         // Create the object instance (placement new)
         Instance = new (&Memory)T();
@@ -209,12 +216,13 @@ public:
     }
 
     // Shutdown the object
-    void Shutdown()
+    template<typename... Args>
+    void Shutdown(Args&&... args)
     {
         if (Instance)
         {
             // Invoke the derived class OnShutdown() method
-            Instance->Shutdown();
+            Instance->Shutdown(args...);
 
             // Call the deallocator
             Instance->~T();
@@ -224,6 +232,8 @@ public:
 
             // Clear the object instance pointer
             Instance = nullptr;
+
+            Initialized = false;
         }
     }
 
@@ -233,7 +243,7 @@ public:
         memset(Memory, 0, sizeof(Memory));
     }
 
-    DI_FORCE_INLINE ~DependencyInjected()
+    DI_FORCE_INLINE virtual ~DependencyInjected()
     {
         // Catch never calling Shutdown() before object goes out of scope
         DI_DEBUG_ASSERT(!IsInitialized());
@@ -269,61 +279,6 @@ protected:
 
 
 //------------------------------------------------------------------------------
-// RequiredDependency
-//
-// Use this to specify a required dependency in a Dependencies list.
-
-/*
-    Example:
-
-    struct Dependencies
-    {
-        RequiredDependency<Widget> widget;
-
-        OptionalDependency<Widget> optionalWidget;
-    };
-*/
-
-template<class T>
-class RequiredDependency
-{
-    DependencyInjected<T>* Reference;
-
-public:
-    RequiredDependency()
-        : Reference(nullptr)
-    {
-        // Dependency is required
-        //DI_DEBUG_ASSERT(Reference != nullptr);
-    }
-    RequiredDependency(DependencyInjected<T>& reference)
-        : Reference(&reference)
-    {
-        // Dependency is required
-        DI_DEBUG_ASSERT(Reference != nullptr);
-    }
-    RequiredDependency(DependencyInjected<T>* reference)
-        : Reference(reference)
-    {
-        // Dependency is required
-        DI_DEBUG_ASSERT(Reference != nullptr);
-    }
-
-    DI_FORCE_INLINE operator bool() const
-    {
-        return Reference != nullptr && *Reference;
-    }
-    DI_FORCE_INLINE T* operator->() const
-    {
-        // Verify that the reference is valid before use
-        DI_DEBUG_ASSERT(Reference != nullptr && *Reference);
-
-        return Reference->GetObjectPtr();
-    }
-};
-
-
-//------------------------------------------------------------------------------
 // OptionalDependency
 //
 // Use this to specify an optional dependency in a Dependencies list.
@@ -342,31 +297,98 @@ public:
 template<class T>
 class OptionalDependency
 {
-    DependencyInjected<T>* Reference;
+protected:
+    T* Reference;
+    IDependencyInjected* Wrapper;
 
 public:
-    OptionalDependency()
-        : Reference(nullptr)
+    virtual ~OptionalDependency() {}
+
+    // Need this to handle nullptr
+    OptionalDependency(void* ptr = nullptr)
     {
+        Reference = nullptr;
+        Wrapper = nullptr;
     }
-    OptionalDependency(DependencyInjected<T>& reference)
-        : Reference(&reference)
+    template<class S>
+    OptionalDependency(DependencyInjected<S>& wrapper)
     {
+        Wrapper = &wrapper;
+        if (Wrapper)
+        {
+            // Types must be convertible e.g. implementation to interface
+            Reference = wrapper.GetObjectPtr();
+        }
+        else
+            Reference = nullptr;
     }
-    OptionalDependency(DependencyInjected<T>* reference)
-        : Reference(reference)
+    template<class S>
+    OptionalDependency(DependencyInjected<S>* wrapper)
     {
+        Wrapper = wrapper;
+        if (Wrapper)
+        {
+            // Types must be convertible e.g. implementation to interface
+            Reference = wrapper->GetObjectPtr();
+        }
+        else
+            Reference = nullptr;
     }
 
+    DI_FORCE_INLINE bool IsInitialized() const
+    {
+        // Verifies that reference is valid and that object is initialized
+        return Wrapper != nullptr && Wrapper->IsInitialized();
+    }
     DI_FORCE_INLINE operator bool() const
     {
-        return Reference != nullptr && *Reference;
+        return IsInitialized();
     }
     DI_FORCE_INLINE T* operator->() const
     {
-        // Verify that the reference is valid before use
-        DI_DEBUG_ASSERT(Reference != nullptr && *Reference);
+        DI_DEBUG_ASSERT(IsInitialized());
 
-        return Reference->GetObjectPtr();
+        return Reference;
+    }
+};
+
+
+//------------------------------------------------------------------------------
+// RequiredDependency
+//
+// Use this to specify a required dependency in a Dependencies list.
+
+/*
+    Example:
+
+    struct Dependencies
+    {
+        RequiredDependency<Widget> widget;
+
+        OptionalDependency<Widget> optionalWidget;
+    };
+*/
+
+template<class T>
+class RequiredDependency : public OptionalDependency<T>
+{
+public:
+    RequiredDependency()
+        : OptionalDependency<T>()
+    {
+    }
+    template<class S>
+    RequiredDependency(DependencyInjected<S>& wrapper)
+        : OptionalDependency<T>(wrapper)
+    {
+        // Dependency is required
+        DI_DEBUG_ASSERT(Reference != nullptr);
+    }
+    template<class S>
+    RequiredDependency(DependencyInjected<S>* wrapper)
+        : OptionalDependency<T>(wrapper)
+    {
+        // Dependency is required
+        DI_DEBUG_ASSERT(Reference != nullptr);
     }
 };
