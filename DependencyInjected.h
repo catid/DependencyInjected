@@ -134,8 +134,6 @@
     }
 */
 
-#include <type_traits>
-
 
 //------------------------------------------------------------------------------
 // Portability macros
@@ -163,13 +161,9 @@
 
 
 //------------------------------------------------------------------------------
-// NoDependencies
-
-struct NoDependencies {};
-
-
-//------------------------------------------------------------------------------
-// IDependencyInjected
+// DependencyInjected
+//
+// Smart pointer with dependency injection
 
 class IDependencyInjected
 {
@@ -189,49 +183,11 @@ protected:
     bool Initialized = false;
 };
 
-
-//------------------------------------------------------------------------------
-// Dependencies Member Check
-
-template <typename T>
-struct has_deps_trait
-{
-    template <typename U, U>
-    class check {};
-
-    //template <typename C>
-    //static char f(check<C::Dependencies*, &C::Dependencies>*);
-
-    template <typename C>
-    static long f(...);
-
-    //static const bool value = (sizeof(f<T>(0)) == sizeof(char));
-    static const bool value = std::is_object(C::Dependencies)::value;
-};
-
-template<typename T, bool>
-struct deps_type_trait
-{
-    typedef NoDependencies type;
-};
-
-template<typename T>
-struct deps_type_trait <T, true>
-{
-    typedef T::Dependencies type;
-};
-
-
-//------------------------------------------------------------------------------
-// DependencyInjected
-//
-// Smart pointer with dependency injection
-
 template<class T>
 class DependencyInjected : public IDependencyInjected
 {
 public:
-    typedef typename deps_type_trait<T, has_deps_trait<T>::value>::type DepsT;
+    typedef typename T::Dependencies DepsT;
 
     // Set dependencies
     DI_FORCE_INLINE void SetDependencies(const DepsT& deps)
@@ -320,8 +276,8 @@ protected:
     T* Instance = nullptr;
 
     // Dependencies for the object
-    bool SetDeps = !has_deps_trait<T>::value;
     typename DepsT Deps;
+    bool SetDeps = false;
 
     // Deleted methods
     DependencyInjected(const DependencyInjected<T>&) = delete;

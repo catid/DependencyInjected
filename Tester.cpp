@@ -121,7 +121,11 @@ void Cog::DoCogThing2()
 class LeafObject
 {
 public:
-    void Initialize(NoDependencies, int parameterX)
+    struct Dependencies
+    {
+    };
+
+    void Initialize(const Dependencies& deps, int parameterX)
     {
         ParameterX = parameterX;
         cout << "LeafObject::Initialize()" << endl;
@@ -147,8 +151,14 @@ private:
 class BranchObject
 {
 public:
-    bool Initialize(NoDependencies, int parameterX)
+    struct Dependencies
     {
+    };
+
+    bool Initialize(const Dependencies& deps, int parameterX)
+    {
+        Deps = deps;
+
         cout << "BranchObject::Initialize()" << endl;
 
         Leaf.SetDependencies({
@@ -169,6 +179,8 @@ public:
     }
 
 private:
+    Dependencies Deps;
+
     DependencyInjected<LeafObject> Leaf;
 };
 
@@ -187,9 +199,18 @@ public:
 class MyImplementation : public IMyInterface
 {
 public:
-    bool Initialize(NoDependencies, int parameterX)
+    struct Dependencies
+    {
+    };
+
+    bool Initialize(const Dependencies& deps, int parameterX)
     {
         cout << "MyImplementation::Initialize()" << endl;
+
+        Deps = deps;
+
+        Leaf.SetDependencies({
+        });
 
         Leaf.Initialize(parameterX);
         return true;
@@ -206,6 +227,7 @@ public:
     }
 
 private:
+    Dependencies Deps;
     DependencyInjected<LeafObject> Leaf;
 };
 
