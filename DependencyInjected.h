@@ -302,6 +302,13 @@ public:
 
         return Instance;
     }
+    DI_FORCE_INLINE T& operator*() const
+    {
+        // In debug mode verify that the object is initialized
+        DI_DEBUG_ASSERT(IsInitialized());
+
+        return *Instance;
+    }
     DI_FORCE_INLINE T* GetObjectPtr()
     {
         return reinterpret_cast<T*>(&Memory);
