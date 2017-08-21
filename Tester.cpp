@@ -266,7 +266,67 @@ private:
 
 
 //------------------------------------------------------------------------------
+// ThirdPartyClass
+
+class ThirdPartyClass
+{
+public:
+    void DoThing()
+    {
+        cout << "ThirdPartyClass::DoThing()" << endl;
+    }
+};
+
+class ThirdPartyClassUser
+{
+public:
+    struct Dependencies
+    {
+        RequiredDependency<ThirdPartyClass> Third;
+    };
+
+    bool Initialize(const Dependencies& deps)
+    {
+        cout << "ThirdPartyClassUser::Initialize()" << endl;
+        Deps = deps;
+
+        return true;
+    }
+    void Shutdown()
+    {
+        cout << "ThirdPartyClassUser::Shutdown()" << endl;
+    }
+
+    void DoThing()
+    {
+        cout << "ThirdPartyClassUser::DoThing()" << endl;
+        Deps.Third->DoThing();
+    }
+
+private:
+    Dependencies Deps;
+};
+
+
+//------------------------------------------------------------------------------
 // Tests
+
+void Test_ThirdPartyObject()
+{
+    // Verifies that we can also inject code from third party developers
+    DependencyInjected<ThirdPartyClassUser> user;
+    ThirdPartyClass third;
+
+    user.SetDependencies({
+        &third
+    });
+
+    user.Initialize();
+
+    user->DoThing();
+
+    user.Shutdown();
+}
 
 void Test_PeerObjects()
 {
@@ -466,6 +526,7 @@ void Test_Forget_ShutdownCog()
 
 bool RunTests()
 {
+    TEST_EXPECT_NOASSERT(Test_ThirdPartyObject);
     TEST_EXPECT_NOASSERT(Test_PeerObjects);
     TEST_EXPECT_NOASSERT(Test_NestedDeps);
     TEST_EXPECT_NOASSERT(Test_DerivedClass);
@@ -504,6 +565,12 @@ Note: Must be built in Debug mode.
 Note: Must be run with debugger DETACHED so assertions can be handled.
 
 Expected Output:
+
+ThirdPartyClassUser::Initialize()
+ThirdPartyClassUser::DoThing()
+ThirdPartyClass::DoThing()
+ThirdPartyClassUser::Shutdown()
+*** Test_ThirdPartyObject() succeeded
 
 Cog::Initialize()
 Widget::Initialize()

@@ -209,7 +209,7 @@ public:
         Initialized = true;
 
         // Create the object instance (placement new)
-        Instance = new (&Memory)T();
+        Instance = new (&ObjectMemory)T();
 
         // Initialize the object
         return Instance->Initialize(Deps, args...);
@@ -228,7 +228,7 @@ public:
             Instance->~T();
 
             // Clear class memory
-            memset(Memory, 0, sizeof(Memory));
+            memset(ObjectMemory, 0, sizeof(ObjectMemory));
 
             // Clear the object instance pointer
             Instance = nullptr;
@@ -240,7 +240,7 @@ public:
     DI_FORCE_INLINE explicit DependencyInjected()
     {
         // Ensure that object memory state is the same in debug and release
-        memset(Memory, 0, sizeof(Memory));
+        memset(ObjectMemory, 0, sizeof(ObjectMemory));
     }
 
     DI_FORCE_INLINE virtual ~DependencyInjected()
@@ -253,30 +253,26 @@ public:
 
     DI_FORCE_INLINE T* operator->() const
     {
-        // In debug mode verify that the object is initialized
-        DI_DEBUG_ASSERT(IsInitialized());
-
+        DI_DEBUG_ASSERT(IsInitialized()); // Object must be initialized before use
         return Instance;
     }
     DI_FORCE_INLINE T& operator*() const
     {
-        // In debug mode verify that the object is initialized
-        DI_DEBUG_ASSERT(IsInitialized());
-
+        DI_DEBUG_ASSERT(IsInitialized()); // Object must be initialized before use
         return *Instance;
     }
     DI_FORCE_INLINE T* GetObjectPtr()
     {
-        return reinterpret_cast<T*>(&Memory);
+        return reinterpret_cast<T*>(&ObjectMemory);
     }
 
 protected:
     // Object instance
-    char Memory[sizeof(T)];
+    char ObjectMemory[sizeof(T)];
     T* Instance = nullptr;
 
     // Dependencies for the object
-    typename DepsT Deps;
+    DepsT Deps;
     bool SetDeps = false;
 
     // Deleted methods
@@ -311,11 +307,15 @@ protected:
 public:
     virtual ~OptionalDependency() {}
 
-    // Need this to handle nullptr
-    OptionalDependency(void* ptr = nullptr)
+    OptionalDependency()
     {
-        Reference = nullptr;
         Wrapper = nullptr;
+        Reference = nullptr;
+    }
+    OptionalDependency(T* reference)
+    {
+        Wrapper = nullptr;
+        Reference = reference;
     }
     template<class S>
     OptionalDependency(DependencyInjected<S>& wrapper)
@@ -345,7 +345,7 @@ public:
     DI_FORCE_INLINE bool IsInitialized() const
     {
         // Verifies that reference is valid and that object is initialized
-        return Wrapper != nullptr && Wrapper->IsInitialized();
+        return Reference != nullptr && (Wrapper == nullptr || Wrapper->IsInitialized());
     }
     DI_FORCE_INLINE operator bool() const
     {
@@ -353,9 +353,13 @@ public:
     }
     DI_FORCE_INLINE T* operator->() const
     {
-        DI_DEBUG_ASSERT(IsInitialized());
-
+        DI_DEBUG_ASSERT(IsInitialized()); // Object must be initialized before use
         return Reference;
+    }
+    DI_FORCE_INLINE T& operator*() const
+    {
+        DI_DEBUG_ASSERT(IsInitialized()); // Object must be initialized before use
+        return *Reference;
     }
 };
 
@@ -381,21 +385,25 @@ class RequiredDependency : public OptionalDependency<T>
 {
 public:
     RequiredDependency()
-        : OptionalDependency<T>()
     {
+        Wrapper = nullptr;
+        Reference = nullptr;
+    }
+    RequiredDependency(T* reference)
+        : OptionalDependency<T>(reference)
+    {
+        DI_DEBUG_ASSERT(Reference != nullptr);
     }
     template<class S>
     RequiredDependency(DependencyInjected<S>& wrapper)
         : OptionalDependency<T>(wrapper)
     {
-        // Dependency is required
         DI_DEBUG_ASSERT(Reference != nullptr);
     }
     template<class S>
     RequiredDependency(DependencyInjected<S>* wrapper)
         : OptionalDependency<T>(wrapper)
     {
-        // Dependency is required
         DI_DEBUG_ASSERT(Reference != nullptr);
     }
 };
